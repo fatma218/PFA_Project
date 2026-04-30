@@ -8,6 +8,10 @@ public class SoapController : MonoBehaviour
     public float pulseMinIntensity = 0.5f;
     public float pulseMaxIntensity = 3f;
 
+    [Header("Animation liquide savon")]
+    public ParticleSystem soapLiquidParticles;  // jet de liquide qui sort du distributeur
+    public AudioSource soapPumpSound;           // son optionnel "pchhht" du distributeur
+
     [Header("Mousse sur les mains")]
     public GameObject foamLeftHand;
     public GameObject foamRightHand;
@@ -24,6 +28,7 @@ public class SoapController : MonoBehaviour
         if (foamLeftHand != null)  foamLeftHand.SetActive(false);
         if (foamRightHand != null) foamRightHand.SetActive(false);
         if (soapHaloLight != null) soapHaloLight.enabled = false;
+        if (soapLiquidParticles != null) soapLiquidParticles.Stop();
 
         HandWashingManager.OnStepChanged += OnStepChanged;
     }
@@ -75,6 +80,7 @@ public class SoapController : MonoBehaviour
         {
             handInZone = true;
             soapTimer = 0f;
+            StartSoapLiquid();
         }
     }
 
@@ -84,7 +90,30 @@ public class SoapController : MonoBehaviour
         {
             handInZone = false;
             soapTimer = 0f;
+            StopSoapLiquid();
         }
+    }
+
+    void StartSoapLiquid()
+    {
+        if (soapLiquidParticles != null && !soapLiquidParticles.isPlaying)
+        {
+            soapLiquidParticles.Play();
+            Debug.Log("🧴 Liquide savon → ON");
+        }
+        if (soapPumpSound != null && !soapPumpSound.isPlaying)
+            soapPumpSound.Play();
+    }
+
+    void StopSoapLiquid()
+    {
+        if (soapLiquidParticles != null && soapLiquidParticles.isPlaying)
+        {
+            soapLiquidParticles.Stop();
+            Debug.Log("🧴 Liquide savon → OFF");
+        }
+        if (soapPumpSound != null && soapPumpSound.isPlaying)
+            soapPumpSound.Stop();
     }
 
     void ApplySoap()
@@ -93,6 +122,7 @@ public class SoapController : MonoBehaviour
         soapZoneActive = false;
         handInZone = false;
         if (soapHaloLight != null) soapHaloLight.enabled = false;
+        StopSoapLiquid();
 
         if (foamLeftHand != null)  foamLeftHand.SetActive(true);
         if (foamRightHand != null) foamRightHand.SetActive(true);
