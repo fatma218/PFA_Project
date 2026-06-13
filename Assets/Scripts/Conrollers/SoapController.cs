@@ -1,55 +1,80 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public class SoapController : MonoBehaviour
 {
-    [Header("Feedback visuel — Halo bleu pulsant (rapport section 2.1.1)")]
-    public Light soapHaloLight;         // lumière point sur le distributeur
-    public float pulseSpeed = 2f;       // vitesse du pulsement
+    [Header("Visual feedback")]
+    public Light soapHaloLight;                  // optionnel — fonctionne en Simulator
+    public Renderer soapGlowRenderer;            // fallback Quest : objet avec matériau émissif
+    public float pulseSpeed = 2f;
     public float pulseMinIntensity = 0.5f;
     public float pulseMaxIntensity = 3f;
+    private Material _glowMatInstance;
+    private static readonly int EmissionColor = Shader.PropertyToID("_EmissionColor");
+    private Color _baseEmission = new Color(0.2f, 0.8f, 1f);
 
-    [Header("Animation liquide savon")]
-    public ParticleSystem soapLiquidParticles;  // jet de liquide qui sort du distributeur
-    public AudioSource soapPumpSound;           // son optionnel "pchhht" du distributeur
+    [Header("Soap liquid animation")]
+    public ParticleSystem soapLiquidParticles;
+    public AudioSource soapPumpSound;
 
-    [Header("Mousse sur les mains")]
+    [Header("Foam on hands")]
     public GameObject foamLeftHand;
     public GameObject foamRightHand;
+    public bool useFoamObjects = false;
 
     [Header("Timing")]
     public float soapContactDuration = 1.5f;
+
+    [Header("Hand layer")]
+    public string handLayerName = "PlayerHand";
+
     private float soapTimer = 0f;
     private bool soapZoneActive = false;
     private bool soapApplied = false;
-    private bool handInZone = false;
+    private readonly HashSet<string> handsInside = new HashSet<string>();
 
-    void Start()
+    private void Start()
     {
-        if (foamLeftHand != null)  foamLeftHand.SetActive(false);
+        if (foamLeftHand != null) foamLeftHand.SetActive(false);
         if (foamRightHand != null) foamRightHand.SetActive(false);
         if (soapHaloLight != null) soapHaloLight.enabled = false;
         if (soapLiquidParticles != null) soapLiquidParticles.Stop();
 
-        HandWashingManager.OnStepChanged += OnStepChanged;
-    }
-
-    void OnDestroy()
-    {
-        HandWashingManager.OnStepChanged -= OnStepChanged;
-    }
-
-    void Update()
-    {
-        // Pulsement du halo bleu quand la zone savon est active
-        if (soapZoneActive && soapHaloLight != null && soapHaloLight.enabled)
+        // Prépare l'émission du matériau (fallback Quest 3)
+        if (soapGlowRenderer != null)
         {
-            float pulse = Mathf.Lerp(pulseMinIntensity, pulseMaxIntensity,
-                          (Mathf.Sin(Time.time * pulseSpeed) + 1f) / 2f);
-            soapHaloLight.intensity = pulse;
+            _glowMatInstance = soapGlowRenderer.material; // instance propre
+            _glowMatInstance.EnableKeyword("_EMISSION");  // obligatoire sur Android/Quest
+            SetGlowEmission(0f);
         }
 
-        // Timer de contact dans la zone savon
-        if (handInZone && soapZoneActive && !soapApplied)
+        HandWashingManager.OnStepChanged += OnStepChanged;
+        HandWashingManager.OnContamination += OnContamination;
+    }
+
+    private void OnDestroy()
+    {
+        HandWashingManager.OnStepChanged -= OnStepChanged;
+        HandWashingManager.OnContamination -= OnContamination;
+    }
+
+    private void Update()
+    {
+        if (soapZoneActive)
+        {
+            float t = (Mathf.Sin(Time.time * pulseSpeed) + 1f) / 2f;
+            float pulse = Mathf.Lerp(pulseMinIntensity, pulseMaxIntensity, t);
+
+            // Lumière classique (Simulator / PC)
+            if (soapHaloLight != null && soapHaloLight.enabled)
+                soapHaloLight.intensity = pulse;
+
+            // Émission matériau (Quest 3)
+            if (_glowMatInstance != null)
+                SetGlowEmission(pulse);
+        }
+
+        if (handsInside.Count > 0 && soapZoneActive && !soapApplied)
         {
             soapTimer += Time.deltaTime;
             if (soapTimer >= soapContactDuration)
@@ -57,84 +82,138 @@ public class SoapController : MonoBehaviour
         }
     }
 
-    void OnStepChanged(HandWashingManager.WashStep step)
+    private void OnStepChanged(HandWashingManager.WashStep step)
     {
         if (step == HandWashingManager.WashStep.TakingSoap)
         {
             soapZoneActive = true;
-            if (soapHaloLight != null) soapHaloLight.enabled = true;
-            Debug.Log("🧴 Halo bleu activé sur distributeur savon");
-        }
-        else
-        {
-            soapZoneActive = false;
-            if (soapHaloLight != null) soapHaloLight.enabled = false;
-        }
-    }
-
-    void OnTriggerEnter(Collider other)
-    {
-        Debug.Log("🔵 Soap Zone Enter : " + other.name);
-        if (!soapZoneActive || soapApplied) return;
-        if (IsHandOrController(other))
-        {
-            handInZone = true;
+            soapApplied = false;
             soapTimer = 0f;
-            StartSoapLiquid();
+            handsInside.Clear();
+
+            if (soapHaloLight != null)
+                soapHaloLight.enabled = true;
+
+            // Allume l'émission du glow (Quest 3)
+            if (_glowMatInstance != null)
+                SetGlowEmission(pulseMinIntensity);
+
+            Debug.Log("Soap zone activated.");
+            return;
         }
+
+        soapZoneActive = false;
+        soapTimer = 0f;
+        handsInside.Clear();
+        StopSoapLiquid();
+
+        if (soapHaloLight != null)
+            soapHaloLight.enabled = false;
+
+        if (_glowMatInstance != null)
+            SetGlowEmission(0f);
     }
 
-    void OnTriggerExit(Collider other)
+    private void SetGlowEmission(float intensity)
     {
-        if (IsHandOrController(other))
+        if (_glowMatInstance == null) return;
+        _glowMatInstance.SetColor(EmissionColor, _baseEmission * intensity);
+    }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        Debug.Log("Soap trigger enter: " + other.name);
+        RegisterHandContact(other);
+    }
+
+    private void OnTriggerStay(Collider other)
+    {
+        RegisterHandContact(other);
+    }
+
+    private void OnTriggerExit(Collider other)
+    {
+        if (!HandContactUtility.IsHandOrController(other, handLayerName)) return;
+
+        string handId = HandContactUtility.GetHandId(other);
+        if (!handsInside.Remove(handId)) return;
+
+        if (handsInside.Count == 0)
         {
-            handInZone = false;
             soapTimer = 0f;
             StopSoapLiquid();
         }
     }
 
-    void StartSoapLiquid()
+    private void RegisterHandContact(Collider other)
+    {
+        if (!soapZoneActive || soapApplied) return;
+        if (!HandContactUtility.IsHandOrController(other, handLayerName)) return;
+
+        string handId = HandContactUtility.GetHandId(other);
+        if (handsInside.Contains(handId)) return;
+
+        handsInside.Add(handId);
+        soapTimer = 0f;
+        StartSoapLiquid();
+    }
+
+    private void StartSoapLiquid()
     {
         if (soapLiquidParticles != null && !soapLiquidParticles.isPlaying)
         {
             soapLiquidParticles.Play();
-            Debug.Log("🧴 Liquide savon → ON");
+            Debug.Log("Soap liquid ON.");
         }
+
         if (soapPumpSound != null && !soapPumpSound.isPlaying)
             soapPumpSound.Play();
     }
 
-    void StopSoapLiquid()
+    private void StopSoapLiquid()
     {
         if (soapLiquidParticles != null && soapLiquidParticles.isPlaying)
         {
             soapLiquidParticles.Stop();
-            Debug.Log("🧴 Liquide savon → OFF");
+            Debug.Log("Soap liquid OFF.");
         }
+
         if (soapPumpSound != null && soapPumpSound.isPlaying)
             soapPumpSound.Stop();
     }
 
-    void ApplySoap()
+    private void ApplySoap()
     {
         soapApplied = true;
         soapZoneActive = false;
-        handInZone = false;
-        if (soapHaloLight != null) soapHaloLight.enabled = false;
+        handsInside.Clear();
+
+        if (soapHaloLight != null)
+            soapHaloLight.enabled = false;
+
         StopSoapLiquid();
 
-        if (foamLeftHand != null)  foamLeftHand.SetActive(true);
-        if (foamRightHand != null) foamRightHand.SetActive(true);
+        if (useFoamObjects && foamLeftHand != null) foamLeftHand.SetActive(true);
+        if (useFoamObjects && foamRightHand != null) foamRightHand.SetActive(true);
 
-        Debug.Log("🧴 Savon appliqué — mousse visible");
+        Debug.Log("Soap applied.");
         HandWashingManager.Instance?.CompleteSoapStep();
     }
 
-    private bool IsHandOrController(Collider other)
+    private void OnContamination()
     {
-        string n = other.gameObject.name.ToLower();
-        return n.Contains("controller") || n.Contains("hand")
-            || n.Contains("anchor") || n.Contains("index");
+        soapZoneActive = false;
+        soapTimer = 0f;
+        handsInside.Clear();
+        StopSoapLiquid();
+
+        if (soapHaloLight != null)
+            soapHaloLight.enabled = false;
+
+        if (_glowMatInstance != null)
+            SetGlowEmission(0f);
+
+        if (useFoamObjects && foamLeftHand != null) foamLeftHand.SetActive(false);
+        if (useFoamObjects && foamRightHand != null) foamRightHand.SetActive(false);
     }
 }

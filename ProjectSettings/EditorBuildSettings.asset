@@ -6,16 +6,18 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/Scenes/PreparationRoom.unity
+    guid: 769f62c908ed43e4fb52f82a83532f0b
+  - enabled: 1
     path: Assets/Scenes/MainMenu.unity
     guid: 12979620e71915b44a043e6b3361b42a
-  - enabled: 0
-    path: Assets/Scenes/PreparationRoom.unity
-    guid: 99c9720ab356a0642a771bea13969a05
-  - enabled: 0
-    path: Assets/Scenes/OperationRoom.unity
-    guid: eb33a931f96be8642b6ef273abf69571
+  - enabled: 1
+    path: Assets/Scenes/OfficeScene.unity
+    guid: 55daccc09a3b69647bbab145b54a3ab3
   m_configObjects:
     com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 99e03fa57d4f4cd41979eea40661047a,
       type: 2}
     com.unity.xr.openxr.settings4: {fileID: 11400000, guid: 4c7da99c663276b4f9176e8836bd6efe,
+      type: 2}
+    xr.sdk.mock-hmd.settings: {fileID: 11400000, guid: d325fcaf7b6e27144b067a32ee753b97,
       type: 2}

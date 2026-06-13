@@ -6,7 +6,7 @@ public class HandWashingManager : MonoBehaviour
 {
     [Header("Mode test (à décocher en prod quand bouton UI prêt)")]
     [Tooltip("Démarre automatiquement le lavage au lancement de la scène")]
-    public bool autoStartOnPlay = true;
+    public bool autoStartOnPlay = false;
     [Tooltip("Touche clavier pour relancer manuellement (Simulator)")]
     public Key restartKey = Key.R;
     [Tooltip("Touche clavier pour démarrer manuellement (Simulator)")]
@@ -35,6 +35,10 @@ public class HandWashingManager : MonoBehaviour
     private float scrubbingTimer = 0f;
     public bool isActivelyScrubbing = true;
     private float lastScrubLogTime = 0f;
+    private bool procedureBlocked = false;
+    public float ScrubbingTimer => scrubbingTimer;
+    public float ScrubbingRemainingTime => Mathf.Max(0f, scrubbingMinDuration - scrubbingTimer);
+    public bool IsProcedureBlocked => procedureBlocked;
 
     [Header("UI")]
     public Text timerDisplay;
@@ -136,6 +140,8 @@ public class HandWashingManager : MonoBehaviour
     {
         globalTimer = 0f;
         timerRunning = true;
+        procedureBlocked = false;
+        isActivelyScrubbing = true;
         ChangeStep(WashStep.WettingHands);
         PlayVoice(voiceWetHands);
         Debug.Log("🚿 Lavage démarré — Chronomètre lancé");
@@ -143,6 +149,7 @@ public class HandWashingManager : MonoBehaviour
 
     public void CompleteWettingStep()
     {
+        if (procedureBlocked) return;
         if (CurrentStep != WashStep.WettingHands) return;
         ChangeStep(WashStep.TakingSoap);
         PlayVoice(voiceTakeSoap);
@@ -150,6 +157,7 @@ public class HandWashingManager : MonoBehaviour
 
     public void CompleteSoapStep()
     {
+        if (procedureBlocked) return;
         if (CurrentStep != WashStep.TakingSoap) return;
         scrubbingTimer = 0f;
         ChangeStep(WashStep.ScrubbingHands);
@@ -162,6 +170,7 @@ public class HandWashingManager : MonoBehaviour
 
     private void AdvanceToRinse()
     {
+        if (procedureBlocked) return;
         if (CurrentStep != WashStep.ScrubbingHands) return;
         PlaySound(soundSuccess);
         ChangeStep(WashStep.RinsingHands);
@@ -176,6 +185,7 @@ public class HandWashingManager : MonoBehaviour
 
     public void CompleteRinsingStep()
     {
+        if (procedureBlocked) return;
         if (CurrentStep != WashStep.RinsingHands) return;
         ChangeStep(WashStep.DryingHands);
         PlayVoice(voiceDry);
@@ -183,24 +193,57 @@ public class HandWashingManager : MonoBehaviour
 
     public void CompleteDryingStep()
     {
+        if (procedureBlocked) return;
         if (CurrentStep != WashStep.DryingHands) return;
         timerRunning = false;
         ChangeStep(WashStep.Complete);
         PlaySound(soundSuccess);
         OnWashComplete?.Invoke();
-        if (successPanel != null) successPanel.SetActive(true);
+        if (successPanel != null)
+        {
+            SuccessMenuController successMenu = successPanel.GetComponent<SuccessMenuController>();
+            if (successMenu == null)
+                successMenu = successPanel.AddComponent<SuccessMenuController>();
+
+            successMenu.Show();
+        }
         Debug.Log("🎉 Lavage réussi !");
     }
 
     public void TriggerContamination(string reason = "surface non stérile")
     {
+        if (procedureBlocked) return;
+
         Debug.LogWarning("⚠️ CONTAMINATION : " + reason);
         timerRunning = false;
+        procedureBlocked = true;
+        isActivelyScrubbing = false;
         PlaySound(soundAlert);
         PlayVoice(voiceContamination);
         OnContamination?.Invoke();
 
-        if (failPanel != null) failPanel.SetActive(true);
+        if (successPanel != null) successPanel.SetActive(false);
+        if (scrubProgressBar != null) scrubProgressBar.gameObject.SetActive(false);
+        if (scrubProgressDisplay != null) scrubProgressDisplay.gameObject.SetActive(false);
+
+        string failureReason = "Vous avez touche : " + reason;
+
+        if (failPanel != null)
+        {
+            FailureMenuController failureMenu = failPanel.GetComponent<FailureMenuController>();
+            if (failureMenu == null)
+                failureMenu = failPanel.AddComponent<FailureMenuController>();
+
+            failureMenu.Show(failureReason);
+            Debug.Log("Fail menu requested after contamination. Active=" + failPanel.activeSelf);
+
+            return;
+        }
+
+        GameObject runtimeFailPanel = new GameObject("RuntimeFailureMenu", typeof(RectTransform), typeof(FailureMenuController));
+        failPanel = runtimeFailPanel;
+        runtimeFailPanel.GetComponent<FailureMenuController>().Show(failureReason);
+        Debug.Log("Runtime fail menu created after contamination.");
     }
 
     public void RestartWashing()
@@ -208,6 +251,8 @@ public class HandWashingManager : MonoBehaviour
         globalTimer = 0f;
         scrubbingTimer = 0f;
         timerRunning = false;
+        procedureBlocked = false;
+        isActivelyScrubbing = true;
 
         if (successPanel != null) successPanel.SetActive(false);
         if (failPanel != null) failPanel.SetActive(false);

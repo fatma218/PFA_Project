@@ -6,6 +6,7 @@ public class RinsingController : MonoBehaviour
     [Header("Mousse à rincer (assigner les ParticleSystems FoamLeft/FoamRight)")]
     public ParticleSystem foamLeftParticles;
     public ParticleSystem foamRightParticles;
+    public bool useFoamParticles = false;
 
     [Header("Timing")]
     [Tooltip("Durée de rinçage requise (mets 5s pour le test, 15-20s en production)")]
@@ -24,6 +25,7 @@ public class RinsingController : MonoBehaviour
     void Start()
     {
         HandWashingManager.OnStepChanged += OnStepChanged;
+        HandWashingManager.OnContamination += OnContamination;
         WaterController.OnHandUnderWater += OnHandUnderWater;
         WaterController.OnHandLeftWater += OnHandLeftWater;
 
@@ -40,6 +42,7 @@ public class RinsingController : MonoBehaviour
     void OnDestroy()
     {
         HandWashingManager.OnStepChanged -= OnStepChanged;
+        HandWashingManager.OnContamination -= OnContamination;
         WaterController.OnHandUnderWater -= OnHandUnderWater;
         WaterController.OnHandLeftWater -= OnHandLeftWater;
     }
@@ -76,6 +79,16 @@ public class RinsingController : MonoBehaviour
         Debug.Log("⚠️ Main sortie de l'eau — rinçage en pause");
     }
 
+    private void OnContamination()
+    {
+        isRinsingActive = false;
+        handInWater = false;
+        rinsingTimer = 0f;
+
+        if (rinseProgressBar != null) rinseProgressBar.gameObject.SetActive(false);
+        if (rinseProgressDisplay != null) rinseProgressDisplay.gameObject.SetActive(false);
+    }
+
     void Update()
     {
         if (!isRinsingActive || !handInWater) return;
@@ -84,7 +97,8 @@ public class RinsingController : MonoBehaviour
         float progress = Mathf.Clamp01(rinsingTimer / rinsingDuration);
 
         // Réduit progressivement la mousse (de 100% à 0%)
-        ReduceFoam(1f - progress);
+        if (useFoamParticles)
+            ReduceFoam(1f - progress);
 
         // UI
         if (rinseProgressBar != null)
@@ -112,8 +126,11 @@ public class RinsingController : MonoBehaviour
 
     void CompleteRinsing()
     {
-        if (foamLeftParticles != null) foamLeftParticles.Stop();
-        if (foamRightParticles != null) foamRightParticles.Stop();
+        if (useFoamParticles)
+        {
+            if (foamLeftParticles != null) foamLeftParticles.Stop();
+            if (foamRightParticles != null) foamRightParticles.Stop();
+        }
 
         Debug.Log("✅ Rinçage terminé — mousse enlevée");
         HandWashingManager.Instance?.CompleteRinsingStep();

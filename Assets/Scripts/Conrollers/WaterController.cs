@@ -1,122 +1,190 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 public class WaterController : MonoBehaviour
 {
-    [Header("Références")]
+    [Header("References")]
     public ParticleSystem waterParticles;
     public AudioSource waterSound;
 
-    [Header("Détection — laisse vide pour tout accepter")]
+    [Header("Duration under water before validating the step")]
+    public float waterValidationDuration = 2f;
+
+    [Header("Hand layer")]
     public string handLayerName = "PlayerHand";
 
-    private int handLayer;
-    private int handsInsideTrigger = 0;
+    private float waterTimer = 0f;
+    private bool waterStepValidated = false;
+    private bool waterRunning = false;
+    private readonly HashSet<string> handsInside = new HashSet<string>();
 
     public static event System.Action OnHandUnderWater;
     public static event System.Action OnHandLeftWater;
 
-    void Start()
+    private void OnEnable()
     {
-        handLayer = LayerMask.NameToLayer(handLayerName);
+        HandWashingManager.OnStepChanged += OnStepChanged;
+        HandWashingManager.OnContamination += OnContamination;
+    }
 
+    private void OnDisable()
+    {
+        HandWashingManager.OnStepChanged -= OnStepChanged;
+        HandWashingManager.OnContamination -= OnContamination;
+    }
+
+    private void Start()
+    {
+        int handLayer = LayerMask.NameToLayer(handLayerName);
         if (handLayer == -1)
-            Debug.LogWarning("⚠️ Layer '" + handLayerName + "' introuvable — détection élargie activée.");
+            Debug.LogWarning("Layer '" + handLayerName + "' not found. Hand detection will use names/components.");
         else
-            Debug.Log("✅ Layer '" + handLayerName + "' trouvé → index : " + handLayer);
+            Debug.Log("Layer '" + handLayerName + "' found, index: " + handLayer);
 
         StopWater();
     }
 
-    void OnTriggerEnter(Collider other)
+    private void Update()
     {
-        // Log pour TOUT ce qui entre — très important pour debugger
-        Debug.Log("🔵 Trigger Enter : " + other.gameObject.name 
-                  + " | Layer : " + LayerMask.LayerToName(other.gameObject.layer));
+        bool isWettingStep = HandWashingManager.Instance != null &&
+                             HandWashingManager.Instance.CurrentStep == HandWashingManager.WashStep.WettingHands;
 
-        if (IsHandOrController(other))
+        if (waterRunning && isWettingStep && !waterStepValidated)
         {
-            handsInsideTrigger++;
-            Debug.Log("✋ Détecté ! Compteur : " + handsInsideTrigger);
+            waterTimer += Time.deltaTime;
 
-            if (handsInsideTrigger == 1)
+            if (waterTimer >= waterValidationDuration)
             {
-                StartWater();
-                OnHandUnderWater?.Invoke();
-            }
-        }
-    }
-
-    void OnTriggerExit(Collider other)
-    {
-        Debug.Log("🔴 Trigger Exit : " + other.gameObject.name);
-
-        if (IsHandOrController(other))
-        {
-            handsInsideTrigger--;
-            Debug.Log("✋ Sorti. Compteur : " + handsInsideTrigger);
-
-            if (handsInsideTrigger == 0)
-            {
-                StopWater();
-                OnHandLeftWater?.Invoke();
+                waterStepValidated = true;
+                Debug.Log("Water step validated after " + waterValidationDuration + "s.");
                 HandWashingManager.Instance?.CompleteWettingStep();
             }
         }
-    }
 
-    private bool IsHandOrController(Collider other)
-    {
-        string objName = other.gameObject.name.ToLower();
-        string layerName = LayerMask.LayerToName(other.gameObject.layer);
+        if (Keyboard.current == null) return;
 
-        // ✅ Cas 1 : layer PlayerHand configuré correctement (casque réel)
-        bool isOnHandLayer = (handLayer != -1 && other.gameObject.layer == handLayer);
-
-        // ✅ Cas 2 : Simulator — controllers Meta ont ces noms typiques
-        bool isSimulatorController = objName.Contains("controller")
-                                  || objName.Contains("hand")
-                                  || objName.Contains("anchor")
-                                  || objName.Contains("pointer")
-                                  || objName.Contains("index")
-                                  || objName.Contains("left")
-                                  || objName.Contains("right");
-
-        // ✅ Cas 3 : layer s'appelle "Hands" ou "Controller" (nommage Meta par défaut)
-        bool isHandLayer = layerName == "Hands" 
-                        || layerName == "Controller"
-                        || layerName == "PlayerHand";
-
-        return isOnHandLayer || isSimulatorController || isHandLayer;
-    }
-
-    void Update()
-    {
-        // Test manuel — touche K pour StartWater, L pour StopWater
         if (Keyboard.current.kKey.wasPressedThisFrame)
         {
-            Debug.Log("⌨️ TEST K → StartWater()");
+            Debug.Log("TEST K -> StartWater()");
             StartWater();
         }
+
         if (Keyboard.current.lKey.wasPressedThisFrame)
         {
-            Debug.Log("⌨️ TEST L → StopWater()");
+            Debug.Log("TEST L -> StopWater()");
             StopWater();
+        }
+
+        if (Keyboard.current.vKey.wasPressedThisFrame)
+        {
+            Debug.Log("TEST V -> force validate water step");
+            waterStepValidated = true;
+            HandWashingManager.Instance?.CompleteWettingStep();
         }
     }
 
-    void StartWater()
+    private void OnStepChanged(HandWashingManager.WashStep step)
     {
-        if (waterParticles != null) waterParticles.Play();
-        else Debug.LogWarning("⚠️ waterParticles non assigné dans l'Inspector !");
+        if (step == HandWashingManager.WashStep.WettingHands ||
+            step == HandWashingManager.WashStep.RinsingHands)
+        {
+            handsInside.Clear();
+            waterTimer = 0f;
+            waterStepValidated = false;
+            StopWater();
+            return;
+        }
 
-        if (waterSound != null) waterSound.Play();
-        Debug.Log("💧 StartWater() appelé");
+        handsInside.Clear();
+        StopWater();
     }
 
-    void StopWater()
+    private void OnContamination()
     {
-        if (waterParticles != null) waterParticles.Stop();
-        if (waterSound != null) waterSound.Stop();
+        handsInside.Clear();
+        waterTimer = 0f;
+        waterStepValidated = false;
+        StopWater();
+        OnHandLeftWater?.Invoke();
+    }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        Debug.Log("Water trigger enter: " + other.gameObject.name
+                  + " | Parent: " + (other.transform.parent != null ? other.transform.parent.name : "none")
+                  + " | Layer: " + LayerMask.LayerToName(other.gameObject.layer));
+
+        RegisterHandContact(other);
+    }
+
+    private void OnTriggerStay(Collider other)
+    {
+        RegisterHandContact(other);
+    }
+
+    private void OnTriggerExit(Collider other)
+    {
+        if (!HandContactUtility.IsHandOrController(other, handLayerName)) return;
+
+        string handId = HandContactUtility.GetHandId(other);
+        if (!handsInside.Remove(handId)) return;
+
+        Debug.Log("Hand left water: " + handId + " | Remaining hands: " + handsInside.Count);
+
+        if (handsInside.Count == 0)
+        {
+            StopWater();
+            OnHandLeftWater?.Invoke();
+
+            if (!waterStepValidated)
+            {
+                waterTimer = 0f;
+                Debug.Log("Water timer reset because hand left before validation.");
+            }
+        }
+    }
+
+    private void RegisterHandContact(Collider other)
+    {
+        if (!HandContactUtility.IsHandOrController(other, handLayerName)) return;
+
+        string handId = HandContactUtility.GetHandId(other);
+        if (handsInside.Contains(handId)) return;
+
+        handsInside.Add(handId);
+        Debug.Log("Hand detected under water: " + handId + " | Hands inside: " + handsInside.Count);
+
+        if (handsInside.Count == 1)
+        {
+            StartWater();
+            OnHandUnderWater?.Invoke();
+        }
+    }
+
+    private void StartWater()
+    {
+        waterRunning = true;
+
+        if (waterParticles != null)
+            waterParticles.Play();
+        else
+            Debug.LogWarning("waterParticles is not assigned in the Inspector.");
+
+        if (waterSound != null && !waterSound.isPlaying)
+            waterSound.Play();
+
+        Debug.Log("Water started.");
+    }
+
+    private void StopWater()
+    {
+        waterRunning = false;
+
+        if (waterParticles != null)
+            waterParticles.Stop();
+
+        if (waterSound != null)
+            waterSound.Stop();
     }
 }

@@ -3,58 +3,81 @@ using UnityEngine;
 public class Contamination : MonoBehaviour
 {
     [Header("Identification de la surface")]
-    [Tooltip("Nom affiché dans les logs et passé à HandWashingManager")]
-    public string surfaceName = "Surface non stérile";
+    [Tooltip("Nom affiche dans les logs et transmis au HandWashingManager")]
+    public string surfaceName = "Surface non sterile";
 
     [Header("Comportement")]
-    [Tooltip("Ne déclenche la contamination que pendant un lavage actif (ignore Idle et Complete)")]
+    [Tooltip("Ignore Idle et Complete")]
     public bool activeOnlyDuringWash = true;
+    [Tooltip("Premiere etape ou cette surface devient non sterile")]
+    public HandWashingManager.WashStep firstContaminatingStep = HandWashingManager.WashStep.RinsingHands;
+    public string handLayerName = "PlayerHand";
 
-    [Header("Feedback visuel (optionnel)")]
+    [Header("Feedback visuel optionnel")]
     public Renderer surfaceRenderer;
     public Color alertColor = new Color(1f, 0.2f, 0.2f);
 
     private Color originalColor;
+    private bool contaminationSent;
 
-    void Start()
+    private void OnEnable()
+    {
+        HandWashingManager.OnStepChanged += OnStepChanged;
+    }
+
+    private void OnDisable()
+    {
+        HandWashingManager.OnStepChanged -= OnStepChanged;
+    }
+
+    private void Start()
     {
         if (surfaceRenderer != null)
             originalColor = surfaceRenderer.material.color;
     }
 
-    void OnTriggerEnter(Collider other)
+    private void OnTriggerEnter(Collider other)
     {
-        if (!IsHandOrController(other)) return;
+        if (contaminationSent) return;
+        if (!HandContactUtility.IsHandOrController(other, handLayerName)) return;
 
-        var mgr = HandWashingManager.Instance;
-        if (mgr == null) return;
+        HandWashingManager manager = HandWashingManager.Instance;
+        if (manager == null) return;
 
-        if (activeOnlyDuringWash)
-        {
-            var step = mgr.CurrentStep;
-            if (step == HandWashingManager.WashStep.Idle ||
-                step == HandWashingManager.WashStep.Complete)
-                return;
-        }
+        if (activeOnlyDuringWash && !IsContaminatingStep(manager.CurrentStep))
+            return;
 
-        Debug.LogWarning("☠️ Contamination — " + surfaceName + " touché par " + other.name);
-        mgr.TriggerContamination(surfaceName);
+        Debug.LogWarning("Contamination - " + surfaceName + " touche par " + other.name);
+        contaminationSent = true;
+        manager.TriggerContamination(surfaceName);
 
         if (surfaceRenderer != null)
             surfaceRenderer.material.color = alertColor;
     }
 
-    void OnTriggerExit(Collider other)
+    private void OnTriggerExit(Collider other)
     {
-        if (IsHandOrController(other) && surfaceRenderer != null)
+        if (HandContactUtility.IsHandOrController(other, handLayerName) && surfaceRenderer != null)
             surfaceRenderer.material.color = originalColor;
     }
 
-    private bool IsHandOrController(Collider other)
+    private bool IsContaminatingStep(HandWashingManager.WashStep step)
     {
-        string n = other.gameObject.name.ToLower();
-        return n.Contains("controller") || n.Contains("hand")
-            || n.Contains("anchor")    || n.Contains("index")
-            || n.Contains("left")      || n.Contains("right");
+        if (step == HandWashingManager.WashStep.Idle ||
+            step == HandWashingManager.WashStep.Complete)
+        {
+            return false;
+        }
+
+        return step >= firstContaminatingStep;
+    }
+
+    private void OnStepChanged(HandWashingManager.WashStep step)
+    {
+        if (step == HandWashingManager.WashStep.Idle ||
+            step == HandWashingManager.WashStep.WettingHands)
+        {
+            contaminationSent = false;
+        }
     }
 }
