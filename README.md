@@ -29,25 +29,34 @@ Le dossier `capture_etape_lavage_scene/` contient :
 
 ### Aperçu des captures
 
-![Salle de lavage dans Unity](capture_etape_lavage_scene/SalledeLavagedansUnity.png)
+<p align="center">
+  <img src="capture_etape_lavage_scene/SalledeLavagedansUnity.png" alt="Salle de lavage dans Unity" width="640" />
+</p>
 
-![Robinet](capture_etape_lavage_scene/scene_01_robinet.png)
+<table>
+  <tr>
+    <td align="center"><img src="capture_etape_lavage_scene/scene_01_robinet.png" alt="Robinet" width="280" /><br/>Robinet</td>
+    <td align="center"><img src="capture_etape_lavage_scene/scene_02_soapdispenser_detection.png" alt="Distributeur de savon" width="280" /><br/>Distributeur de savon</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="capture_etape_lavage_scene/scene_03_halo_savon.png" alt="Halo savon" width="280" /><br/>Halo savon</td>
+    <td align="center"><img src="capture_etape_lavage_scene/scene_04_frottage_minuteur.png" alt="Frottage avec minuteur" width="280" /><br/>Frottage avec minuteur</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="capture_etape_lavage_scene/scene_05_rincage.png" alt="Rinçage" width="280" /><br/>Rinçage</td>
+    <td align="center"><img src="capture_etape_lavage_scene/scene_06_sechage_tissu.png" alt="Séchage" width="280" /><br/>Séchage</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="capture_etape_lavage_scene/Trushzone.png" alt="Zone de poubelle" width="280" /><br/>Zone de poubelle</td>
+    <td align="center"><img src="capture_etape_lavage_scene/succeedmenu.png" alt="Réussite" width="280" /><br/>Réussite</td>
+  </tr>
+</table>
 
-![Distributeur de savon](capture_etape_lavage_scene/scene_02_soapdispenser_detection.png)
+### Écran d'échec
 
-![Halo savon](capture_etape_lavage_scene/scene_03_halo_savon.png)
-
-![Frottage avec minuteur](capture_etape_lavage_scene/scene_04_frottage_minuteur.png)
-
-![Rinçage](capture_etape_lavage_scene/scene_05_rincage.png)
-
-![Séchage](capture_etape_lavage_scene/scene_06_sechage_tissu.png)
-
-![Échec contamination](capture_etape_lavage_scene/scene_failmenu_contamination.png)
-
-![Réussite](capture_etape_lavage_scene/succeedmenu.png)
-
-![Zone de poubelle](capture_etape_lavage_scene/Trushzone.png)
+<p align="center">
+  <img src="capture_etape_lavage_scene/scene_failmenu_contamination.png" alt="Échec contamination" width="640" />
+</p>
 
 ## Utilisation
 
